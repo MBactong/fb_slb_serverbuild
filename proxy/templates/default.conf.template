@@ -1,0 +1,92 @@
+
+server {
+  listen        80 default_server;
+  server_name   ${SITE_DOMAIN};
+
+  #for certbot challenges (renewal process)
+  location ^~ /.well-known/acme-challenge/ {
+    auth_basic off;
+    allow all;
+    default_type "text/plain";
+    root  /var/www/letsencrypt;
+  }
+
+  location = /.well-known/acme-challenge/ {
+    return 404;
+  }
+
+  location / {
+    return 301 https://${SITE_DOMAIN}$request_uri;
+  }
+}
+
+server {
+  listen 443 ssl http2;
+  server_name   ${SITE_DOMAIN};
+
+  ssl_certificate /etc/letsencrypt/live/${SITE_DOMAIN}/fullchain.pem;
+  ssl_certificate_key /etc/letsencrypt/live/${SITE_DOMAIN}/privkey.pem;
+  ssl_trusted_certificate /etc/letsencrypt/live/${SITE_DOMAIN}/chain.pem;
+  
+  ssl_session_cache shared:le_nginx_SSL:10m;
+  ssl_session_timeout 1440m;
+  ssl_session_tickets off;
+  ssl_dhparam /etc/letsencrypt/dhparam.pem;
+
+  ssl_protocols TLSv1.2 TLSv1.3;
+  ssl_prefer_server_ciphers on;
+  
+  ssl_ciphers "ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305:DHE-RSA-AES128-GCM-SHA256:DHE-RSA-AES256-GCM-SHA384";
+
+  #add_header X-Frame-Options DENY;
+
+  #for certbot challenges (renewal process)
+  location ^~ /.well-known/acme-challenge/ {
+    auth_basic off;
+    allow all;
+    default_type "text/plain";
+    root  /var/www/letsencrypt;
+  }
+
+  location = /.well-known/acme-challenge/ {
+    return 404;
+  }
+
+  location ${SITE_PATH_V3} {
+    proxy_pass  http://fishbasev3/;
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto https;
+  }
+
+  location ${SITE_PATH_V4} {
+    proxy_pass  http://fishbasev4/;
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto https;
+    #proxy_redirect off;
+    add_header X-Frame-Options DENY;
+  }
+
+  location ${SITE_PATH_V4}/ {
+    proxy_pass  http://fishbasev4/;
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto https;
+    #proxy_redirect off;
+    add_header X-Frame-Options DENY;
+  }
+
+  location ${SITE_PATH_V4}/images {
+    proxy_pass http://fishbasev3/images;
+  }
+
+  #location /images {
+  #  proxy_pass https://www.fishbase.de/images;
+  #}
+
+}
+

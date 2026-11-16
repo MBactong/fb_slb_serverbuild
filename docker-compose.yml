@@ -1,0 +1,170 @@
+version: '3.6'
+
+services:
+    mysql:
+        build: ./mysql
+        container_name: fb-mysql
+        restart: unless-stopped
+        volumes:
+            - ./mysql/dump/:/docker-entrypoint-initdb.d/
+            - ${DATA_PATH_HOST}:/var/lib/mysql/
+        environment:
+            - MYSQL_ROOT_PASSWORD=${MYSQL_ROOT_PASSWORD}
+            - MYSQL_USER=${MYSQL_USER}
+            - MYSQL_PASSWORD=${MYSQL_PASSWORD}
+            - TZ=${TIMEZONE}
+        ports:
+            - 3306:3306
+        #expose:
+        #    - 3306
+        #cap_add:
+        #    - SYS_NICE  # CAP_SYS_NICE
+        networks:
+            - backend
+    elasticsearch:
+        build: ./elasticsearch
+        container_name: fb-elastic
+        restart: unless-stopped
+        volumes:
+            - ${VOLUMES_DRIVER}/elasticsearch/data:/usr/share/elasticsearch/data/
+        environment:
+            - cluster.name=fb-escluster
+            - discovery.type=single-node
+            - node.name=fb-node1
+#            - bootstrap.memory_lock=true
+            - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
+#            - cluster.initial_master_nodes=fb-node1
+        ulimits:
+            memlock:
+                soft: -1
+                hard: -1
+            nofile:
+                soft: 65536
+                hard: 65536
+#        ports:
+#            - 9200:9200
+        expose:
+            - 9200
+        networks:
+            - backend
+        depends_on:
+            - mysql
+    logstash:
+        build: ./logstash
+        container_name: fb-logstash
+        volumes:
+            - ./logstash/pipeline/:/usr/share/logstash/pipeline/
+            - ./logstash/config/:/usr/share/logstash/config/
+        environment:
+            - LOGSTASH_JDBC_URL=jdbc:mysql://mysql:3306/fbapp?useSSL=false&sessionVariables=group_concat_max_len=393210&allowPublicKeyRetrieval=true
+            - LOGSTASH_JDBC_DRIVER=com.mysql.cj.jdbc.Driver
+            - LOGSTASH_JDBC_DRIVER_ALT=com.mysql.jdbc.Driver
+            - LOGSTASH_JDBC_DRIVER_JAR_LOCATION=/usr/share/logstash/lib/mysql-connector-java-8.0.24.jar
+            - LOGSTASH_JDBC_USERNAME=${MYSQL_USER}
+            - LOGSTASH_JDBC_PASSWORD=${MYSQL_PASSWORD}
+            - LOGSTASH_ELASTICSEARCH_HOST=http://elasticsearch:9200
+        networks:
+            - backend
+        depends_on:
+            - mysql
+            - elasticsearch
+
+    fishbasev4:
+        build: ./fishbasev4
+        container_name: fb-webv4
+        restart: unless-stopped
+        volumes:
+            - ./fishbasev4/conf/000-default.conf:/etc/apache2/sites-available/000-default.conf
+            - ./fishbasev4/conf/fishbase.ini:/usr/local/etc/php/conf.d/fishbase.ini
+            - ./fishbasev4/conf/opcache.ini:/usr/local/etc/php/conf.d/opcache.ini
+            - ${VOLUMES_DRIVER}/fishbasev4/site:/var/www/html/
+        environment:
+            - APP_URL=${SITE_PROTOCOL}://${SITE_DOMAIN}${SITE_PATH_V4}
+            - ASSET_URL=${SITE_PATH_V4}
+            - DB_USERNAME=${MYSQL_USER}
+            - DB_PASSWORD=${MYSQL_PASSWORD}
+            - DB_HOST=mysql
+            - DB_PORT=3306
+            - ES_HOST=elasticsearch
+            - ES_PORT=9200
+            - TZ=${TIMEZONE}
+        #ports:
+        #    - 8084:80
+        expose:
+            - 80
+        networks:
+            - backend
+            - frontend
+        depends_on:
+            - mysql
+            - elasticsearch
+    fishbasev3:
+        build: ./fishbasev3
+        container_name: fb-webv3
+        restart: unless-stopped
+        volumes:
+            - ./fishbasev3/conf/fishbase.ini:/usr/local/etc/php/conf.d/fishbase.ini
+            - ./fishbasev3/conf/opcache.ini:/usr/local/etc/php/conf.d/opcache.ini
+            - ${VOLUMES_DRIVER}/fishbasev3/site:/var/www/html/
+        environment:
+            - DB_USERNAME=${MYSQL_USER}
+            - DB_PASSWORD=${MYSQL_PASSWORD}
+            - DB_HOST=mysql
+            - DB_PORT=3306
+            - TZ=${TIMEZONE}
+        #ports:
+        #    - 8083:80
+        expose:
+            - 80
+        networks:
+            - backend
+            - frontend
+        depends_on:
+            - mysql
+    proxy:
+        build:
+            context: ./proxy
+            dockerfile: Dockerfile
+            args:
+                - SITE_DOMAIN=${SITE_DOMAIN}
+                - CERTBOT=${CERTBOT}
+                - CERTBOT_DOMAIN=${CERTBOT_DOMAIN}
+                - CERTBOT_EMAIL=${CERTBOT_EMAIL}
+                - TZ=${TIMEZONE}
+        container_name: fb-proxy
+        restart: unless-stopped
+        volumes:
+            - ./proxy/templates/:/etc/nginx/templates/
+            - ./proxy/letsencrypt/:/etc/letsencrypt/
+            - ./proxy/log/:/var/log/nginx/
+        environment:
+            - SITE_DOMAIN=${SITE_DOMAIN}
+            - SITE_PATH_V3=${SITE_PATH_V3}
+            #- SITE_PATH_SLBV1=${SITE_PATH_SLBV1}            
+            - SITE_PATH_V4=${SITE_PATH_V4}
+            - CERTBOT=${CERTBOT}
+            - CERTBOT_DOMAIN=${CERTBOT_DOMAIN}
+            - CERTBOT_EMAIL=${CERTBOT_EMAIL}
+            - TZ=${TIMEZONE}
+        ports:
+            - 80:80
+            - 443:443
+        #expose:
+        #    - 80
+        #    - 443
+        networks:
+            - frontend
+        depends_on:
+            - fishbasev3
+            - fishbasev4
+            #- sealifebasev1
+            
+           
+#volumes:
+#    mysql-data:
+
+networks:
+    backend:
+        driver: bridge
+    frontend:
+        driver: bridge

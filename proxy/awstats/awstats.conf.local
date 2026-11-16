@@ -1,0 +1,7 @@
+LogFile="/var/log/nginx/access.log"
+LogFormat=1
+SiteDomain="${SITE_DOMAIN}"
+UseHTTPSLinkForUrl="/"
+#PurgeLogFile=1
+SkipFiles="REGEX[^\/awstats]"
+#LoadPlugin="timezone"

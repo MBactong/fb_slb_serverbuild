@@ -1,0 +1,4 @@
+*.sql
+./fishbasev3/site
+./fishbasev4/site
+./mysql/dump

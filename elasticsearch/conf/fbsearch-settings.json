@@ -1,0 +1,28 @@
+{
+  "settings": {
+    "analysis": {
+      "normalizer": {
+        "lc_normalizer": {
+          "type": "custom",
+          "filter": ["lowercase"]
+        }
+      }
+    }
+  },
+  "mappings": {
+      "properties": {
+        "ScientificName": {
+          "type": "text",
+          "fields": {
+            "lc": {
+              "type": "keyword",
+              "normalizer": "lc_normalizer"
+            },
+            "keyword" : {
+              "type": "keyword"
+            }
+          }
+        }
+      }
+  }
+}
